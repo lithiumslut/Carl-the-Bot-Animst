@@ -30,6 +30,19 @@ let score;
 
 client.on("ready",() => {
   console.log(`I'm online at ${date.getMinutes()}:${date.getSeconds()}:${date.getMilliseconds()}`);
+
+  const punTable = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='puns';").get();
+
+  if(!punTable["count(*)"]) {
+    sql.prepare("CREATE TABLE puns (id INTEGER PRIMARY KEY, user TEXT, guild TEXT, pun TEXT)").run();
+
+    sql.prepare("CREATE UNIQUE INDEX idx_scored_id ON scores (id);").run();
+    sql.pragma("synchronous = 1");
+    sql.pragma("journal_mode = wal");
+  }
+
+  client.getPun = sql.prepare("SELECT * FROM puns ORDER BY RANDOM() LIMIT 1;");
+  client.setPun = sql.prepare("INSERT INTO puns (id, user, guild, pun) VALUES (@id, @user, @guild, @pun);");
 });
 
 client.on("message", message => {
@@ -67,11 +80,29 @@ client.on("message", message => {
   //z.startFold - embed template
   let embed = new Discord.RichEmbed().setColor(0x000000);
   //z.endFold
-  
+
   if (command === "ping") {
 
     embed.setAuthor("Ping", client.user.avatarURL)
       .addField("Pong!", `${Date.now() - message.createdTimestamp}ms`);
+  }
+  else if (command === "pun") {
+    pun = client.getPun.get();
+    embed.setAuthor("Random Pun", client.user.avatarURL)
+      .setDescription(pun.pun)
+      .setFooter(`Pun #${pun.id} by ${client.users.get(pun.user).tag}`, client.users.get(pun.user).avatarURL);
+  }
+  else if (command === "newpun") {
+
+    const pun = sql.prepare("SELECT *, MAX(id) FROM puns");
+    pun.id++;
+    const punInfo = {id: pun.id, user: message.author.id, guild: message.guild.id, pun: message.content.slice((config.prefix.length + 6)).trim()};
+
+    client.setPun.run(punInfo);
+
+    embed.setAuthor("Pun Added!", client.user.avatarURL)
+      .setDescription(`"${punInfo.pun}"`)
+      .setFooter(`Pun #${punInfo.id} by ${client.users.get(punInfo.user).tag}`, client.users.get(punInfo.user).avatarURL);
   }
   //not a command
   else if (message.content.startsWith(prefix)) {
